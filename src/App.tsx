@@ -1,242 +1,209 @@
+import React, { useState, useCallback, useRef } from 'react';
 import {
-  useIsAuthenticated,
-  useMsal,
   AuthenticatedTemplate,
   UnauthenticatedTemplate,
-} from "@azure/msal-react";
-import { useState, useEffect, useCallback } from "react";
-import { loginScopes } from "./authConfig";
+  useMsal,
+} from '@azure/msal-react';
+import { ReactFlowProvider } from '@xyflow/react';
 
-const ABB_RED = "#FF000F";
+import LoginScreen from './components/LoginScreen';
+import Header from './components/Header';
+import ComponentPalette from './components/ComponentPalette';
+import DiagramCanvas, { type DiagramCanvasRef } from './components/DiagramCanvas';
+import PropertiesPanel from './components/PropertiesPanel';
+import SaveLoadDialog from './components/SaveLoadDialog';
+import PdfExportDialog from './components/PdfExportDialog';
 
-const FLOW_URL = import.meta.env.VITE_FLOW_URL as string;
+import { useLocalStorage } from './hooks/useLocalStorage';
+import { usePdfExport } from './hooks/usePdfExport';
+import {
+  createDefaultMetadata,
+  type ProjectMetadata,
+  type DiagramState,
+  type OtNodeData,
+  type OtNode,
+} from './types/diagram';
 
-// ─── Login screen ─────────────────────────────────────────────
-
-function LoginScreen() {
-  const { instance } = useMsal();
-
-  const handleLogin = () => {
-    instance.loginPopup({ scopes: loginScopes }).catch(console.error);
-  };
-
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        fontFamily: "system-ui, sans-serif",
-        background: "#f5f5f5",
-      }}
-    >
-      <h1 style={{ marginBottom: 8, fontSize: 28, color: "#222" }}>
-        ABB ELDS Solutions
-      </h1>
-      <h2 style={{ marginBottom: 32, fontWeight: 400, color: "#555" }}>
-        Budget Tool
-      </h2>
-      <button
-        onClick={handleLogin}
-        style={{
-          background: ABB_RED,
-          color: "#fff",
-          border: "none",
-          borderRadius: 6,
-          padding: "14px 40px",
-          fontSize: 16,
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
-      >
-        Sign In
-      </button>
-    </div>
-  );
-}
-
-// ─── SharePoint value via Power Automate ──────────────────────
-
-function SharePointValue() {
+function DiagramEditor() {
   const { accounts } = useMsal();
-  const [value, setValue] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const canvasRef = useRef<DiagramCanvasRef>(null);
 
-  const fetchValue = useCallback(async () => {
+  const [metadata, setMetadata] = useState<ProjectMetadata>(() =>
+    createDefaultMetadata(accounts[0]?.name || 'Unknown')
+  );
+  const [purdueZonesVisible, setPurdueZonesVisible] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<'save' | 'load' | 'pdf' | null>(null);
+
+  const { listDiagrams, saveDiagram, loadDiagram, deleteDiagram, exportToJson, importFromJson } =
+    useLocalStorage();
+  const { exportPdf } = usePdfExport();
+
+  const getState = useCallback((): DiagramState => {
+    const canvas = canvasRef.current;
+    return {
+      nodes: canvas?.getNodes() || [],
+      edges: canvas?.getEdges() || [],
+      metadata,
+      purdueZonesVisible,
+    };
+  }, [metadata, purdueZonesVisible]);
+
+  const loadState = useCallback((state: DiagramState) => {
+    canvasRef.current?.setNodes(state.nodes);
+    canvasRef.current?.setEdges(state.edges);
+    setMetadata(state.metadata);
+    setPurdueZonesVisible(state.purdueZonesVisible);
+  }, []);
+
+  const handleSave = useCallback(
+    (name: string) => {
+      const state = getState();
+      state.metadata.projectName = name;
+      state.metadata.modifiedDate = new Date().toISOString().split('T')[0];
+      saveDiagram(name, state);
+      setMetadata((m) => ({
+        ...m,
+        projectName: name,
+        modifiedDate: state.metadata.modifiedDate,
+      }));
+      setDialog(null);
+    },
+    [getState, saveDiagram]
+  );
+
+  const handleLoad = useCallback(
+    (id: string) => {
+      const state = loadDiagram(id);
+      if (state) {
+        loadState(state);
+        setDialog(null);
+      }
+    },
+    [loadDiagram, loadState]
+  );
+
+  const handleImport = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      const res = await fetch(FLOW_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "getConfig",
-          key: "HELLO_WORLD",
-          userEmail: accounts[0]?.username,
-        }),
-      });
-
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`Flow error ${res.status}: ${body}`);
-      }
-
-      const data = await res.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      if (data.value === undefined || data.value === null) {
-        throw new Error(
-          'No item found with Title = "HELLO_WORLD" in BudgetTool_Config list.'
-        );
-      }
-
-      setValue(data.value);
+      const state = await importFromJson();
+      loadState(state);
+      setDialog(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
+      alert(err instanceof Error ? err.message : 'Import failed');
     }
-  }, [accounts]);
+  }, [importFromJson, loadState]);
 
-  useEffect(() => {
-    fetchValue();
-  }, [fetchValue]);
+  const handleExportJson = useCallback(() => {
+    const state = getState();
+    exportToJson(state, metadata.projectName || 'diagram');
+  }, [getState, exportToJson, metadata.projectName]);
 
-  if (loading) {
-    return (
-      <div style={{ textAlign: "center", padding: 40, color: "#888" }}>
-        Loading SharePoint data...
-      </div>
+  const handleExportPdf = useCallback(
+    async (meta: ProjectMetadata) => {
+      try {
+        setDialog(null);
+        await new Promise((r) => setTimeout(r, 200));
+        await exportPdf(meta);
+        setMetadata(meta);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'PDF export failed');
+      }
+    },
+    [exportPdf]
+  );
+
+  const selectedNode = selectedNodeId
+    ? canvasRef.current?.getNodes().find((n) => n.id === selectedNodeId) || null
+    : null;
+
+  const handleUpdateNode = useCallback((nodeId: string, data: Partial<OtNodeData>) => {
+    canvasRef.current?.setNodes(
+      (canvasRef.current?.getNodes() || []).map((n: OtNode) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
+      )
     );
-  }
-
-  if (error) {
-    return (
-      <div
-        style={{
-          maxWidth: 600,
-          margin: "40px auto",
-          padding: 24,
-          background: "#fff0f0",
-          border: "1px solid #ffcccc",
-          borderRadius: 8,
-          color: "#c00",
-          fontFamily: "monospace",
-          fontSize: 14,
-          wordBreak: "break-word",
-        }}
-      >
-        <strong>SharePoint Error</strong>
-        <br />
-        <br />
-        {error}
-        <br />
-        <br />
-        <button
-          onClick={fetchValue}
-          style={{
-            background: ABB_RED,
-            color: "#fff",
-            border: "none",
-            borderRadius: 4,
-            padding: "8px 20px",
-            cursor: "pointer",
-          }}
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+  }, []);
 
   return (
     <div
       style={{
-        maxWidth: 480,
-        margin: "40px auto",
-        padding: 32,
-        background: "#fff",
-        borderRadius: 12,
-        boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
-        textAlign: "center",
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        fontFamily: 'system-ui, sans-serif',
       }}
     >
-      <div style={{ fontSize: 14, color: "#888", marginBottom: 8 }}>
-        BudgetTool_Config &rarr; HELLO_WORLD
+      <Header
+        projectName={metadata.projectName}
+        purdueZonesVisible={purdueZonesVisible}
+        onTogglePurdue={() => setPurdueZonesVisible((v) => !v)}
+        onSave={() => setDialog('save')}
+        onLoad={() => setDialog('load')}
+        onExportPdf={() => setDialog('pdf')}
+      />
+
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <ComponentPalette />
+
+        <ReactFlowProvider>
+          <DiagramCanvas
+            ref={canvasRef}
+            purdueZonesVisible={purdueZonesVisible}
+            onSelectionChange={setSelectedNodeId}
+          />
+        </ReactFlowProvider>
+
+        <PropertiesPanel
+          selectedNode={selectedNode as OtNode | null}
+          onUpdateNode={handleUpdateNode}
+        />
       </div>
-      <div style={{ fontSize: 32, fontWeight: 700, color: "#222" }}>
-        {value}
-      </div>
+
+      {dialog === 'save' && (
+        <SaveLoadDialog
+          mode="save"
+          currentName={metadata.projectName}
+          diagrams={listDiagrams()}
+          onSave={handleSave}
+          onLoad={handleLoad}
+          onDelete={deleteDiagram}
+          onImport={handleImport}
+          onExport={handleExportJson}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'load' && (
+        <SaveLoadDialog
+          mode="load"
+          currentName={metadata.projectName}
+          diagrams={listDiagrams()}
+          onSave={handleSave}
+          onLoad={handleLoad}
+          onDelete={deleteDiagram}
+          onImport={handleImport}
+          onExport={handleExportJson}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === 'pdf' && (
+        <PdfExportDialog
+          metadata={metadata}
+          onExport={handleExportPdf}
+          onClose={() => setDialog(null)}
+        />
+      )}
     </div>
   );
 }
-
-// ─── Authenticated layout ─────────────────────────────────────
-
-function Dashboard() {
-  const { instance, accounts } = useMsal();
-  const name = accounts[0]?.name ?? "User";
-
-  const handleLogout = () => {
-    instance.logoutPopup().catch(console.error);
-  };
-
-  return (
-    <div style={{ fontFamily: "system-ui, sans-serif", minHeight: "100vh" }}>
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "12px 24px",
-          background: ABB_RED,
-          color: "#fff",
-        }}
-      >
-        <strong>ABB ELDS Solutions Budget Tool</strong>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span>{name}</span>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: "#fff",
-              color: ABB_RED,
-              border: "none",
-              borderRadius: 4,
-              padding: "6px 16px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Sign Out
-          </button>
-        </div>
-      </header>
-
-      <SharePointValue />
-    </div>
-  );
-}
-
-// ─── Root ─────────────────────────────────────────────────────
 
 export default function App() {
-  useIsAuthenticated(); // trigger re-render on auth change
-
   return (
     <>
       <UnauthenticatedTemplate>
         <LoginScreen />
       </UnauthenticatedTemplate>
       <AuthenticatedTemplate>
-        <Dashboard />
+        <DiagramEditor />
       </AuthenticatedTemplate>
     </>
   );
