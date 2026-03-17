@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useCallback, useRef, forwardRef, useImperativeHandle, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -9,18 +9,22 @@ import {
   useEdgesState,
   type Connection,
   type Edge,
+  type EdgeTypes,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { nodeTypes } from '../nodes/nodeTypes';
+import CableEdge from '../nodes/CableEdge';
 import { getComponentDef } from '../constants/otComponents';
+import { getEdgeStyle } from '../constants/cableTypes';
 import type { OtNode, OtNodeData } from '../types/diagram';
 import PurdueZones from './PurdueZones';
 
 interface DiagramCanvasProps {
   purdueZonesVisible: boolean;
-  onSelectionChange: (nodeId: string | null) => void;
+  selectedCableType: string;
+  onSelectionChange: (nodeId: string | null, edgeId: string | null) => void;
 }
 
 export interface DiagramCanvasRef {
@@ -32,8 +36,12 @@ export interface DiagramCanvasRef {
 
 let nodeIdCounter = 0;
 
+const edgeTypes: EdgeTypes = {
+  cable: CableEdge,
+};
+
 const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
-  ({ purdueZonesVisible, onSelectionChange }, ref) => {
+  ({ purdueZonesVisible, selectedCableType, onSelectionChange }, ref) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<OtNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
@@ -47,9 +55,21 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
 
     const onConnect = useCallback(
       (connection: Connection) => {
-        setEdges((eds) => addEdge({ ...connection, animated: true, style: { stroke: '#888', strokeWidth: 2 } }, eds));
+        const style = getEdgeStyle(selectedCableType);
+        setEdges((eds) =>
+          addEdge(
+            {
+              ...connection,
+              type: 'cable',
+              data: { cableType: selectedCableType },
+              animated: false,
+              style,
+            },
+            eds
+          )
+        );
       },
-      [setEdges]
+      [setEdges, selectedCableType]
     );
 
     const onDragOver = useCallback((event: React.DragEvent) => {
@@ -88,10 +108,22 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
     );
 
     const onSelectionChangeHandler = useCallback(
-      ({ nodes: selectedNodes }: { nodes: OtNode[] }) => {
-        onSelectionChange(selectedNodes.length > 0 ? selectedNodes[0].id : null);
+      ({ nodes: selectedNodes, edges: selectedEdges }: { nodes: OtNode[]; edges: Edge[] }) => {
+        const nodeId = selectedNodes.length > 0 ? selectedNodes[0].id : null;
+        const edgeId = selectedEdges.length > 0 ? selectedEdges[0].id : null;
+        onSelectionChange(nodeId, edgeId);
       },
       [onSelectionChange]
+    );
+
+    const defaultEdgeOptions = useMemo(
+      () => ({
+        type: 'cable' as const,
+        data: { cableType: selectedCableType },
+        animated: false,
+        style: getEdgeStyle(selectedCableType),
+      }),
+      [selectedCableType]
     );
 
     return (
@@ -104,23 +136,23 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
           onConnect={onConnect}
           onDragOver={onDragOver}
           onDrop={onDrop}
-          onInit={(instance) => { reactFlowInstance.current = instance as unknown as ReactFlowInstance; }}
+          onInit={(instance) => {
+            reactFlowInstance.current = instance as unknown as ReactFlowInstance;
+          }}
           onSelectionChange={onSelectionChangeHandler}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           deleteKeyCode="Delete"
           multiSelectionKeyCode="Shift"
           snapToGrid
           snapGrid={[20, 20]}
-          defaultEdgeOptions={{ animated: true, style: { stroke: '#888', strokeWidth: 2 } }}
+          defaultEdgeOptions={defaultEdgeOptions}
         >
           {purdueZonesVisible && <PurdueZones />}
           <Background gap={20} size={1} color="#e0e0e0" />
           <Controls />
-          <MiniMap
-            nodeStrokeWidth={3}
-            style={{ background: '#f8f8f8' }}
-          />
+          <MiniMap nodeStrokeWidth={3} style={{ background: '#f8f8f8' }} />
         </ReactFlow>
       </div>
     );

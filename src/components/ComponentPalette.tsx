@@ -2,8 +2,17 @@ import React from 'react';
 import { sidebarStyle, GRAY_BORDER } from '../constants/styles';
 import { OT_COMPONENTS } from '../constants/otComponents';
 import { iconMap } from '../nodes/icons';
+import CableTypeSelector from './CableTypeSelector';
 
-const ComponentPalette: React.FC = () => {
+interface ComponentPaletteProps {
+  selectedCableType: string;
+  onCableTypeChange: (type: string) => void;
+}
+
+const ComponentPalette: React.FC<ComponentPaletteProps> = ({
+  selectedCableType,
+  onCableTypeChange,
+}) => {
   const onDragStart = (event: React.DragEvent, componentType: string) => {
     event.dataTransfer.setData('application/ot-component', componentType);
     event.dataTransfer.effectAllowed = 'move';
@@ -47,15 +56,22 @@ const ComponentPalette: React.FC = () => {
           </div>
         );
       })}
+
+      <div style={{ borderTop: '2px solid ' + GRAY_BORDER, marginTop: 8 }}>
+        <CableTypeSelector selectedType={selectedCableType} onSelect={onCableTypeChange} />
+      </div>
+
       <div
         style={{
-          padding: '16px',
+          padding: '12px 16px',
           fontSize: 11,
           color: '#aaa',
           textAlign: 'center',
         }}
       >
-        Drag components onto the canvas
+        Drag components onto canvas.
+        <br />
+        Select cable type before connecting.
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import {
   UnauthenticatedTemplate,
   useMsal,
 } from '@azure/msal-react';
-import { ReactFlowProvider } from '@xyflow/react';
+import { ReactFlowProvider, type Edge } from '@xyflow/react';
 
 import LoginScreen from './components/LoginScreen';
 import Header from './components/Header';
@@ -16,6 +16,7 @@ import PdfExportDialog from './components/PdfExportDialog';
 
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { usePdfExport } from './hooks/usePdfExport';
+import { getEdgeStyle } from './constants/cableTypes';
 import {
   createDefaultMetadata,
   type ProjectMetadata,
@@ -33,6 +34,8 @@ function DiagramEditor() {
   );
   const [purdueZonesVisible, setPurdueZonesVisible] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [selectedCableType, setSelectedCableType] = useState('cat6');
   const [dialog, setDialog] = useState<'save' | 'load' | 'pdf' | null>(null);
 
   const { listDiagrams, saveDiagram, loadDiagram, deleteDiagram, exportToJson, importFromJson } =
@@ -112,14 +115,37 @@ function DiagramEditor() {
     [exportPdf]
   );
 
+  const handleSelectionChange = useCallback((nodeId: string | null, edgeId: string | null) => {
+    setSelectedNodeId(nodeId);
+    setSelectedEdgeId(edgeId);
+  }, []);
+
   const selectedNode = selectedNodeId
     ? canvasRef.current?.getNodes().find((n) => n.id === selectedNodeId) || null
+    : null;
+
+  const selectedEdge = selectedEdgeId
+    ? canvasRef.current?.getEdges().find((e) => e.id === selectedEdgeId) || null
     : null;
 
   const handleUpdateNode = useCallback((nodeId: string, data: Partial<OtNodeData>) => {
     canvasRef.current?.setNodes(
       (canvasRef.current?.getNodes() || []).map((n: OtNode) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
+      )
+    );
+  }, []);
+
+  const handleUpdateEdge = useCallback((edgeId: string, cableType: string) => {
+    canvasRef.current?.setEdges(
+      (canvasRef.current?.getEdges() || []).map((e: Edge) =>
+        e.id === edgeId
+          ? {
+              ...e,
+              data: { ...e.data, cableType },
+              style: getEdgeStyle(cableType),
+            }
+          : e
       )
     );
   }, []);
@@ -143,19 +169,25 @@ function DiagramEditor() {
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <ComponentPalette />
+        <ComponentPalette
+          selectedCableType={selectedCableType}
+          onCableTypeChange={setSelectedCableType}
+        />
 
         <ReactFlowProvider>
           <DiagramCanvas
             ref={canvasRef}
             purdueZonesVisible={purdueZonesVisible}
-            onSelectionChange={setSelectedNodeId}
+            selectedCableType={selectedCableType}
+            onSelectionChange={handleSelectionChange}
           />
         </ReactFlowProvider>
 
         <PropertiesPanel
           selectedNode={selectedNode as OtNode | null}
+          selectedEdge={selectedEdge || null}
           onUpdateNode={handleUpdateNode}
+          onUpdateEdge={handleUpdateEdge}
         />
       </div>
 
