@@ -17,11 +17,20 @@ async function getAccessToken(
   instance: ReturnType<typeof useMsal>["instance"],
   account: ReturnType<typeof useMsal>["accounts"][0]
 ) {
-  const resp = await instance.acquireTokenSilent({
-    scopes: graphScopes.sharepoint,
-    account,
-  });
-  return resp.accessToken;
+  try {
+    const resp = await instance.acquireTokenSilent({
+      scopes: graphScopes.sharepoint,
+      account,
+    });
+    return resp.accessToken;
+  } catch {
+    // If silent fails (e.g. consent needed), prompt the user interactively
+    const resp = await instance.acquireTokenPopup({
+      scopes: graphScopes.sharepoint,
+      account,
+    });
+    return resp.accessToken;
+  }
 }
 
 async function graphGet(token: string, url: string) {

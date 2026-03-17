@@ -25,5 +25,5 @@ export const msalConfig: Configuration = {
 
 export const graphScopes = {
   login: ["openid", "profile", "User.Read"],
-  sharepoint: ["Sites.ReadWrite.All"],
+  sharepoint: ["Sites.Read.All"],
 };
