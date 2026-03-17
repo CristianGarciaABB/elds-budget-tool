@@ -11,7 +11,7 @@ const ABB_RED = "#FF000F";
 
 const SHAREPOINT_SITE_URL = import.meta.env.VITE_SHAREPOINT_SITE_URL as string;
 
-// ─── Graph helpers ────────────────────────────────────────────
+// ─── SharePoint helpers ───────────────────────────────────────
 
 async function getAccessToken(
   instance: ReturnType<typeof useMsal>["instance"],
@@ -33,13 +33,16 @@ async function getAccessToken(
   }
 }
 
-async function graphGet(token: string, url: string) {
+async function spGet(token: string, url: string) {
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json;odata=nometadata",
+    },
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Graph ${res.status}: ${body}`);
+    throw new Error(`SharePoint ${res.status}: ${body}`);
   }
   return res.json();
 }
@@ -105,22 +108,11 @@ function SharePointValue() {
 
       const token = await getAccessToken(instance, accounts[0]);
 
-      // 1. Resolve site ID from the SharePoint site URL
-      //    VITE_SHAREPOINT_SITE_URL example:
-      //    https://contoso.sharepoint.com/sites/MySite
-      const url = new URL(SHAREPOINT_SITE_URL);
-      const hostname = url.hostname; // e.g. contoso.sharepoint.com
-      const sitePath = url.pathname; // e.g. /sites/MySite
-      const siteRes = await graphGet(
+      // Use SharePoint REST API directly
+      const baseUrl = SHAREPOINT_SITE_URL.replace(/\/$/, "");
+      const listRes = await spGet(
         token,
-        `https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`
-      );
-      const siteId = siteRes.id;
-
-      // 2. Get list "BudgetTool_Config"
-      const listRes = await graphGet(
-        token,
-        `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/BudgetTool_Config/items?$expand=fields&$filter=fields/Title eq 'HELLO_WORLD'`
+        `${baseUrl}/_api/web/lists/getbytitle('BudgetTool_Config')/items?$filter=Title eq 'HELLO_WORLD'&$select=Title,Value`
       );
 
       const items = listRes.value;
@@ -130,7 +122,7 @@ function SharePointValue() {
         );
       }
 
-      const fieldValue = items[0].fields.Value;
+      const fieldValue = items[0].Value;
       if (fieldValue === undefined) {
         throw new Error(
           'Item found but "Value" field is missing or empty.'
