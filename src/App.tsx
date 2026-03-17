@@ -60,7 +60,7 @@ function LoginScreen() {
 // ─── SharePoint value via Power Automate ──────────────────────
 
 function SharePointValue() {
-  const { accounts } = useMsal();
+  const { instance, accounts } = useMsal();
   const [value, setValue] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +70,28 @@ function SharePointValue() {
       setLoading(true);
       setError(null);
 
+      // Get a token for the Logic Apps / Power Automate audience
+      let accessToken = "";
+      try {
+        const tokenResp = await instance.acquireTokenSilent({
+          scopes: ["https://service.flow.microsoft.com/.default"],
+          account: accounts[0],
+        });
+        accessToken = tokenResp.accessToken;
+      } catch {
+        const tokenResp = await instance.acquireTokenPopup({
+          scopes: ["https://service.flow.microsoft.com/.default"],
+          account: accounts[0],
+        });
+        accessToken = tokenResp.accessToken;
+      }
+
       const res = await fetch(FLOW_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
           action: "getConfig",
           key: "HELLO_WORLD",
