@@ -5,47 +5,11 @@ import {
   UnauthenticatedTemplate,
 } from "@azure/msal-react";
 import { useState, useEffect, useCallback } from "react";
-import { graphScopes } from "./authConfig";
+import { loginScopes } from "./authConfig";
 
 const ABB_RED = "#FF000F";
 
-const SHAREPOINT_SITE_URL = import.meta.env.VITE_SHAREPOINT_SITE_URL as string;
-
-// ─── SharePoint helpers ───────────────────────────────────────
-
-async function getAccessToken(
-  instance: ReturnType<typeof useMsal>["instance"],
-  account: ReturnType<typeof useMsal>["accounts"][0]
-) {
-  try {
-    const resp = await instance.acquireTokenSilent({
-      scopes: graphScopes.sharepoint,
-      account,
-    });
-    return resp.accessToken;
-  } catch {
-    // If silent fails (e.g. consent needed), prompt the user interactively
-    const resp = await instance.acquireTokenPopup({
-      scopes: graphScopes.sharepoint,
-      account,
-    });
-    return resp.accessToken;
-  }
-}
-
-async function spGet(token: string, url: string) {
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json;odata=nometadata",
-    },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`SharePoint ${res.status}: ${body}`);
-  }
-  return res.json();
-}
+const FLOW_URL = import.meta.env.VITE_FLOW_URL as string;
 
 // ─── Login screen ─────────────────────────────────────────────
 
@@ -53,7 +17,7 @@ function LoginScreen() {
   const { instance } = useMsal();
 
   const handleLogin = () => {
-    instance.loginPopup({ scopes: graphScopes.login }).catch(console.error);
+    instance.loginPopup({ scopes: loginScopes }).catch(console.error);
   };
 
   return (
@@ -93,10 +57,10 @@ function LoginScreen() {
   );
 }
 
-// ─── SharePoint value card ────────────────────────────────────
+// ─── SharePoint value via Power Automate ──────────────────────
 
 function SharePointValue() {
-  const { instance, accounts } = useMsal();
+  const { accounts } = useMsal();
   const [value, setValue] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,36 +70,40 @@ function SharePointValue() {
       setLoading(true);
       setError(null);
 
-      const token = await getAccessToken(instance, accounts[0]);
+      const res = await fetch(FLOW_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "getConfig",
+          key: "HELLO_WORLD",
+          userEmail: accounts[0]?.username,
+        }),
+      });
 
-      // Use SharePoint REST API directly
-      const baseUrl = SHAREPOINT_SITE_URL.replace(/\/$/, "");
-      const listRes = await spGet(
-        token,
-        `${baseUrl}/_api/web/lists/getbytitle('BudgetTool_Config')/items?$filter=Title eq 'HELLO_WORLD'&$select=Title,Value`
-      );
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`Flow error ${res.status}: ${body}`);
+      }
 
-      const items = listRes.value;
-      if (!items || items.length === 0) {
+      const data = await res.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (data.value === undefined || data.value === null) {
         throw new Error(
           'No item found with Title = "HELLO_WORLD" in BudgetTool_Config list.'
         );
       }
 
-      const fieldValue = items[0].Value;
-      if (fieldValue === undefined) {
-        throw new Error(
-          'Item found but "Value" field is missing or empty.'
-        );
-      }
-
-      setValue(fieldValue);
+      setValue(data.value);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [instance, accounts]);
+  }, [accounts]);
 
   useEffect(() => {
     fetchValue();

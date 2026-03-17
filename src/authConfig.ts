@@ -23,11 +23,4 @@ export const msalConfig: Configuration = {
   },
 };
 
-// Extract SharePoint hostname for token scope
-const spUrl = import.meta.env.VITE_SHAREPOINT_SITE_URL || "";
-const spOrigin = spUrl ? new URL(spUrl).origin : "";
-
-export const graphScopes = {
-  login: ["openid", "profile", "User.Read"],
-  sharepoint: [`${spOrigin}/AllSites.Read`],
-};
+export const loginScopes = ["openid", "profile", "User.Read"];
