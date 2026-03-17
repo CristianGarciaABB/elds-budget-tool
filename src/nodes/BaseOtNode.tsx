@@ -9,6 +9,8 @@ const BaseOtNode: React.FC<NodeProps> = ({ data, selected }) => {
   const def = getComponentDef(nodeData.componentType);
   const IconComponent = iconMap[nodeData.componentType];
 
+  const hs = { background: def.color, width: 7, height: 7, border: '2px solid #fff' };
+
   return (
     <div
       style={{
@@ -26,11 +28,16 @@ const BaseOtNode: React.FC<NodeProps> = ({ data, selected }) => {
         cursor: 'grab',
       }}
     >
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={{ background: def.color, width: 8, height: 8, border: '2px solid #fff' }}
-      />
+      {/* Top */}
+      <Handle type="target" position={Position.Top} id="t1" style={{ ...hs, left: '30%' }} />
+      <Handle type="target" position={Position.Top} id="t2" style={{ ...hs, left: '70%' }} />
+
+      {/* Left */}
+      <Handle type="target" position={Position.Left} id="l1" style={{ ...hs, top: '50%' }} />
+
+      {/* Right */}
+      <Handle type="source" position={Position.Right} id="r1" style={{ ...hs, top: '50%' }} />
+
       {IconComponent && (
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4 }}>
           <IconComponent size={40} color={def.color} />
@@ -44,11 +51,10 @@ const BaseOtNode: React.FC<NodeProps> = ({ data, selected }) => {
           {nodeData.ipAddress}
         </div>
       )}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={{ background: def.color, width: 8, height: 8, border: '2px solid #fff' }}
-      />
+
+      {/* Bottom */}
+      <Handle type="source" position={Position.Bottom} id="b1" style={{ ...hs, left: '30%' }} />
+      <Handle type="source" position={Position.Bottom} id="b2" style={{ ...hs, left: '70%' }} />
     </div>
   );
 };

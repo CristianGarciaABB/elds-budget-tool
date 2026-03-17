@@ -5,7 +5,9 @@ import { headerStyle, ABB_RED, primaryButton, secondaryButton } from '../constan
 interface HeaderProps {
   projectName: string;
   purdueZonesVisible: boolean;
+  showCableLabels: boolean;
   onTogglePurdue: () => void;
+  onToggleCableLabels: () => void;
   onSave: () => void;
   onLoad: () => void;
   onExportPdf: () => void;
@@ -14,13 +16,22 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({
   projectName,
   purdueZonesVisible,
+  showCableLabels,
   onTogglePurdue,
+  onToggleCableLabels,
   onSave,
   onLoad,
   onExportPdf,
 }) => {
   const { instance, accounts } = useMsal();
   const userName = accounts[0]?.name || 'User';
+
+  const toggleBtn = (active: boolean) => ({
+    ...secondaryButton,
+    fontSize: 12,
+    background: active ? '#e3f2fd' : '#e0e0e0',
+    border: active ? '1px solid #90caf9' : '1px solid transparent',
+  });
 
   return (
     <header style={headerStyle}>
@@ -36,16 +47,11 @@ const Header: React.FC<HeaderProps> = ({
         <button onClick={onLoad} style={{ ...secondaryButton, fontSize: 12 }}>
           📂 Load
         </button>
-        <button
-          onClick={onTogglePurdue}
-          style={{
-            ...secondaryButton,
-            fontSize: 12,
-            background: purdueZonesVisible ? '#e3f2fd' : '#e0e0e0',
-            border: purdueZonesVisible ? '1px solid #90caf9' : '1px solid transparent',
-          }}
-        >
+        <button onClick={onTogglePurdue} style={toggleBtn(purdueZonesVisible)}>
           {purdueZonesVisible ? '🏗️ Purdue ON' : '🏗️ Purdue OFF'}
+        </button>
+        <button onClick={onToggleCableLabels} style={toggleBtn(showCableLabels)}>
+          {showCableLabels ? '🏷️ Labels ON' : '🏷️ Labels OFF'}
         </button>
         <button onClick={onExportPdf} style={{ ...primaryButton, fontSize: 12 }}>
           📄 Export PDF

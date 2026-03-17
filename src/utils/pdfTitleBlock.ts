@@ -1,5 +1,6 @@
 import type { jsPDF } from 'jspdf';
 import type { ProjectMetadata } from '../types/diagram';
+import { CABLE_TYPES } from '../constants/cableTypes';
 
 const BLOCK_HEIGHT = 35; // mm
 const MARGIN = 10; // mm
@@ -66,8 +67,75 @@ export function drawTitleBlock(doc: jsPDF, metadata: ProjectMetadata) {
   drawCell('APPROVER', metadata.approver || '—', col4, midY, col5 - col4);
   drawCell('STATUS', 'DRAFT', col5, midY, colEnd - col5);
 
-  // Return the Y position where the diagram area ends
   return blockY - 5;
+}
+
+export function drawCableLegend(doc: jsPDF, usedCableTypes: string[]) {
+  const usedCables = CABLE_TYPES.filter((c) => usedCableTypes.includes(c.type));
+  if (usedCables.length === 0) return;
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  const legendWidth = 55; // mm
+  const rowHeight = 5; // mm
+  const legendHeight = 8 + usedCables.length * rowHeight; // header + rows
+  const legendX = pageWidth - MARGIN - legendWidth;
+  const legendY = pageHeight - MARGIN - BLOCK_HEIGHT - 8 - legendHeight;
+
+  // Background
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(legendX, legendY, legendWidth, legendHeight, 2, 2, 'FD');
+
+  // Header
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 100, 100);
+  doc.text('CABLE LEGEND', legendX + 3, legendY + 5);
+
+  // Entries
+  usedCables.forEach((cable, i) => {
+    const y = legendY + 9 + i * rowHeight;
+
+    // Parse color hex to RGB
+    const hex = cable.color.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+
+    // Draw line sample
+    doc.setDrawColor(r, g, b);
+    doc.setLineWidth(Math.min(cable.strokeWidth * 0.4, 1));
+
+    if (cable.dashArray) {
+      // Draw dashed line manually (jsPDF doesn't support dasharray directly)
+      const lineStartX = legendX + 3;
+      const lineEndX = legendX + 15;
+      const segments = cable.dashArray.split(' ').map(Number);
+      let cx = lineStartX;
+      let draw = true;
+      let segIdx = 0;
+      while (cx < lineEndX) {
+        const segLen = Math.min((segments[segIdx % segments.length] || 3) * 0.3, lineEndX - cx);
+        if (draw) {
+          doc.line(cx, y + 1.5, cx + segLen, y + 1.5);
+        }
+        cx += segLen;
+        draw = !draw;
+        segIdx++;
+      }
+    } else {
+      doc.line(legendX + 3, y + 1.5, legendX + 15, y + 1.5);
+    }
+
+    // Label
+    doc.setFontSize(6);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(50, 50, 50);
+    doc.text(cable.label, legendX + 17, y + 2.5);
+  });
 }
 
 export function getDiagramArea(doc: jsPDF) {

@@ -19,11 +19,14 @@ import CableEdge from '../nodes/CableEdge';
 import { getComponentDef } from '../constants/otComponents';
 import { getEdgeStyle } from '../constants/cableTypes';
 import type { OtNode, OtNodeData } from '../types/diagram';
+import type { CableEdgeData } from '../nodes/CableEdge';
 import PurdueZones from './PurdueZones';
+import CableLegend from './CableLegend';
 
 interface DiagramCanvasProps {
   purdueZonesVisible: boolean;
   selectedCableType: string;
+  showCableLabels: boolean;
   onSelectionChange: (nodeId: string | null, edgeId: string | null) => void;
 }
 
@@ -41,7 +44,7 @@ const edgeTypes: EdgeTypes = {
 };
 
 const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
-  ({ purdueZonesVisible, selectedCableType, onSelectionChange }, ref) => {
+  ({ purdueZonesVisible, selectedCableType, showCableLabels, onSelectionChange }, ref) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<OtNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
@@ -53,6 +56,26 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
       setEdges: (e: Edge[]) => setEdges(e),
     }));
 
+    // Inject showLabel into all edge data when toggle changes
+    const edgesWithLabels = useMemo(
+      () =>
+        edges.map((e) => ({
+          ...e,
+          data: { ...(e.data || {}), showLabel: showCableLabels },
+        })),
+      [edges, showCableLabels]
+    );
+
+    // Collect used cable types for legend
+    const usedCableTypes = useMemo(() => {
+      const types = new Set<string>();
+      edges.forEach((e) => {
+        const d = e.data as CableEdgeData | undefined;
+        if (d?.cableType) types.add(d.cableType);
+      });
+      return Array.from(types);
+    }, [edges]);
+
     const onConnect = useCallback(
       (connection: Connection) => {
         const style = getEdgeStyle(selectedCableType);
@@ -61,7 +84,7 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
             {
               ...connection,
               type: 'cable',
-              data: { cableType: selectedCableType },
+              data: { cableType: selectedCableType, showLabel: showCableLabels },
               animated: false,
               style,
             },
@@ -69,7 +92,7 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
           )
         );
       },
-      [setEdges, selectedCableType]
+      [setEdges, selectedCableType, showCableLabels]
     );
 
     const onDragOver = useCallback((event: React.DragEvent) => {
@@ -119,18 +142,18 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
     const defaultEdgeOptions = useMemo(
       () => ({
         type: 'cable' as const,
-        data: { cableType: selectedCableType },
+        data: { cableType: selectedCableType, showLabel: showCableLabels },
         animated: false,
         style: getEdgeStyle(selectedCableType),
       }),
-      [selectedCableType]
+      [selectedCableType, showCableLabels]
     );
 
     return (
       <div style={{ flex: 1, height: '100%', position: 'relative' }}>
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={edgesWithLabels}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -154,6 +177,7 @@ const DiagramCanvas = forwardRef<DiagramCanvasRef, DiagramCanvasProps>(
           <Controls />
           <MiniMap nodeStrokeWidth={3} style={{ background: '#f8f8f8' }} />
         </ReactFlow>
+        <CableLegend usedCableTypes={usedCableTypes} />
       </div>
     );
   }

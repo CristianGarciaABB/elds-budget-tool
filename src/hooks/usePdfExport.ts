@@ -1,17 +1,21 @@
 import { useCallback } from 'react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import { drawTitleBlock, getDiagramArea } from '../utils/pdfTitleBlock';
+import { drawTitleBlock, drawCableLegend, getDiagramArea } from '../utils/pdfTitleBlock';
 import type { ProjectMetadata } from '../types/diagram';
 
 export function usePdfExport() {
-  const exportPdf = useCallback(async (metadata: ProjectMetadata) => {
+  const exportPdf = useCallback(async (metadata: ProjectMetadata, usedCableTypes: string[]) => {
     const flowElement = document.querySelector('.react-flow') as HTMLElement;
     if (!flowElement) throw new Error('Diagram canvas not found');
 
-    // Hide controls and minimap for clean export
-    const controls = flowElement.querySelectorAll('.react-flow__controls, .react-flow__minimap');
-    controls.forEach((el) => (el as HTMLElement).style.display = 'none');
+    // Hide controls, minimap, and on-screen legend for clean export
+    const hideElements = flowElement.querySelectorAll(
+      '.react-flow__controls, .react-flow__minimap'
+    );
+    const legendEl = document.querySelector('.cable-legend') as HTMLElement | null;
+    hideElements.forEach((el) => ((el as HTMLElement).style.display = 'none'));
+    if (legendEl) legendEl.style.display = 'none';
 
     try {
       const canvas = await html2canvas(flowElement, {
@@ -59,12 +63,16 @@ export function usePdfExport() {
       const imgData = canvas.toDataURL('image/png');
       doc.addImage(imgData, 'PNG', imgX, imgY, imgWidth, imgHeight);
 
+      // Draw cable legend in bottom-right of diagram area
+      drawCableLegend(doc, usedCableTypes);
+
       // Save
       const filename = `${metadata.projectName.replace(/\s+/g, '_')}_${metadata.drawingNumber}.pdf`;
       doc.save(filename);
     } finally {
-      // Restore controls
-      controls.forEach((el) => (el as HTMLElement).style.display = '');
+      // Restore hidden elements
+      hideElements.forEach((el) => ((el as HTMLElement).style.display = ''));
+      if (legendEl) legendEl.style.display = '';
     }
   }, []);
 

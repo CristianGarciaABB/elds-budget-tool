@@ -17,6 +17,7 @@ import PdfExportDialog from './components/PdfExportDialog';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { usePdfExport } from './hooks/usePdfExport';
 import { getEdgeStyle } from './constants/cableTypes';
+import type { CableEdgeData } from './nodes/CableEdge';
 import {
   createDefaultMetadata,
   type ProjectMetadata,
@@ -33,6 +34,7 @@ function DiagramEditor() {
     createDefaultMetadata(accounts[0]?.name || 'Unknown')
   );
   const [purdueZonesVisible, setPurdueZonesVisible] = useState(false);
+  const [showCableLabels, setShowCableLabels] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [selectedCableType, setSelectedCableType] = useState('cat6');
@@ -41,6 +43,16 @@ function DiagramEditor() {
   const { listDiagrams, saveDiagram, loadDiagram, deleteDiagram, exportToJson, importFromJson } =
     useLocalStorage();
   const { exportPdf } = usePdfExport();
+
+  const getUsedCableTypes = useCallback((): string[] => {
+    const edges = canvasRef.current?.getEdges() || [];
+    const types = new Set<string>();
+    edges.forEach((e) => {
+      const d = e.data as CableEdgeData | undefined;
+      if (d?.cableType) types.add(d.cableType);
+    });
+    return Array.from(types);
+  }, []);
 
   const getState = useCallback((): DiagramState => {
     const canvas = canvasRef.current;
@@ -106,13 +118,14 @@ function DiagramEditor() {
       try {
         setDialog(null);
         await new Promise((r) => setTimeout(r, 200));
-        await exportPdf(meta);
+        const usedTypes = getUsedCableTypes();
+        await exportPdf(meta, usedTypes);
         setMetadata(meta);
       } catch (err) {
         alert(err instanceof Error ? err.message : 'PDF export failed');
       }
     },
-    [exportPdf]
+    [exportPdf, getUsedCableTypes]
   );
 
   const handleSelectionChange = useCallback((nodeId: string | null, edgeId: string | null) => {
@@ -162,7 +175,9 @@ function DiagramEditor() {
       <Header
         projectName={metadata.projectName}
         purdueZonesVisible={purdueZonesVisible}
+        showCableLabels={showCableLabels}
         onTogglePurdue={() => setPurdueZonesVisible((v) => !v)}
+        onToggleCableLabels={() => setShowCableLabels((v) => !v)}
         onSave={() => setDialog('save')}
         onLoad={() => setDialog('load')}
         onExportPdf={() => setDialog('pdf')}
@@ -179,6 +194,7 @@ function DiagramEditor() {
             ref={canvasRef}
             purdueZonesVisible={purdueZonesVisible}
             selectedCableType={selectedCableType}
+            showCableLabels={showCableLabels}
             onSelectionChange={handleSelectionChange}
           />
         </ReactFlowProvider>
